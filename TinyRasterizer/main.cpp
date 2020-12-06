@@ -1,6 +1,9 @@
-#include<old\tgaimage.h>
-#include<old\model.h>
-#include<old\geometry.h>
+//#include<old\tgaimage.h>
+//#include<old\model.h>
+//#include<old\geometry.h>
+#include"tgaimage.h"
+#include"model.h"
+#include"geometry.h"
 #include<cmath>
 #include<vector>
 #include<algorithm>
@@ -89,7 +92,7 @@ void triangleOutline(Vec2f t0, Vec2f t1, Vec2f t2, TGAImage& image, const TGACol
 
 }
 
-void triangle(Vec3i t0, Vec3i t1, Vec3i t2, float* zbuffer,TGAImage& image, const TGAColor& color)
+void oldtriangle(Vec3i t0, Vec3i t1, Vec3i t2, float* zbuffer,TGAImage& image, const TGAColor& color)
 {
 	if (t1.y > t2.y) { swap(t2, t1); }
 	if (t0.y > t1.y) { swap(t0, t1); }
@@ -136,6 +139,22 @@ Vec3f barycentric(Vec2i p0, Vec2i p1, Vec2i p2, Vec2i point)
 	return Vec3f(e21p / total, e02p / total, e10p / total);
 	
 }
+
+Matrix v2m(Vec3f v)
+{
+	Matrix m = Matrix::identity();
+	m[0][0] = v.x;
+	m[1][0] = v.y;
+	m[2][0] = v.z;
+	m[3][0] = 1.f;
+	return m;
+}
+
+Vec3f m2v(Matrix m)
+{
+	return Vec3f(m[0][0]/m[3][0], m[1][0]/m[3][0], m[2][0]/m[3][0]);
+}
+
 //vt:texture coordinates
 void triangle(Vec3f* vertex, float* zbuffer, TGAImage& image,TGAImage& texture,Vec2f* vt, float lightVolume) {
 	Vec2i v[3];
@@ -161,6 +180,7 @@ void triangle(Vec3f* vertex, float* zbuffer, TGAImage& image,TGAImage& texture,V
 
 	for (int i = v[0].y; i <= v[2].y; ++i)
 	{
+		if (i >= height||i<0 ) { continue; }
 		x02 = v[0].x + (i - v[0].y) * s02;
 		x1 = i > v[1].y ? (v[1].x + (i - v[1].y) * s12) : (v[0].x + (i - v[0].y) * s01);
 
@@ -168,6 +188,7 @@ void triangle(Vec3f* vertex, float* zbuffer, TGAImage& image,TGAImage& texture,V
 		//每个像素
 		for (int j = x02; j < x1; ++j)
 		{
+			if (j >= width||j<0 ) { continue; }
 			int index = j + i * width;
 			Vec3f barycentricCoo = barycentric(v[0], v[1], v[2], Vec2i(j, i));
 			float zval = z[0] * barycentricCoo[0] + z[1] * barycentricCoo[1] + z[2] * barycentricCoo[2];
@@ -183,14 +204,28 @@ void triangle(Vec3f* vertex, float* zbuffer, TGAImage& image,TGAImage& texture,V
 					y_texture_coord += barycentricCoo[t] * vt[t].y;
 				}
 				TGAColor color=texture.get(x_texture_coord, y_texture_coord);
-				color.r *= lightVolume;
-				color.g *= lightVolume;
-				color.b *= lightVolume;
+				color = color * lightVolume;
 				image.set(j, i,color);
 			}
 		}
 	}
 }
+//assume world coordinate ranges -1~1
+Matrix world2screen(int width,int height)
+{
+	Matrix m = Matrix::identity();
+	m[0][0] = m[0][3] =width / 2;
+	m[1][1] = m[1][3] = height / 2;
+	return m;
+}
+
+Matrix OrthogonalConvert(float cameraZ)
+{
+	Matrix m = Matrix::identity();
+	m[3][2] = -1 / cameraZ;
+	return m;
+}
+
 
 int main() {
 	/*
@@ -215,11 +250,23 @@ int main() {
 	{
 		zbuffer[i] = numeric_limits<int>::min();
 	}
-	model = new Model("../../tinyrenderer-master/include/obj/african_head/african_head.obj");
+	model = new Model("obj/african_head/african_head.obj");
 	const int texturewidth = 800, textureHeight = 800;
 	TGAImage image(width, height, TGAImage::RGB);
 	TGAImage texture;
-	texture.read_tga_file("../../tinyrenderer-master/include/obj/african_head/african_head_diffuse.tga");
+	texture.read_tga_file("obj/african_head/african_head_diffuse.tga");
+
+
+
+	//camera position(0,0,c)
+	int c = 3;
+	/// <summary>
+	/// 手算了一下 对于列向量（本次代码中的是列向量），后进行的矩阵变换靠左，先进行的矩阵变换靠右
+	/// 例如：A*B*v,是先将向量v进行B变换，然后进行A变换
+	/// </summary>
+	/// <returns></returns>
+	Matrix m = world2screen(width, height)*OrthogonalConvert(c);
+
 	//for each triangle
 	for (int i = 0; i < model->nfaces(); i++) {
 		std::vector<int> face = model->face(i);
@@ -227,31 +274,51 @@ int main() {
 		Vec3f screen_coords[3];
 		Vec2f screen_texture_coords[3];
 		float lightVolume;
-		//for each vertex
-		for (int j = 0; j < 3; j++) {
-			Vec3f world_coords = model->vert(face[j]);
-			Vec2f texture_coord = model->vt(vtface[j]);
-			screen_coords[j] = Vec3f((world_coords.x + 1.) * width / 2., (world_coords.y + 1.) * height / 2.,world_coords.z);
-			screen_texture_coords[j] = Vec2f(texture_coord.x*texture.get_width(),(1-texture_coord.y)*texture.get_height());
-		}
+
+		//calculate light volume
 		Vec3f diff1 = model->vert(face[0]) - model->vert(face[1]);
 		Vec3f diff2 = model->vert(face[2]) - model->vert(face[1]);
 
-		//float cross = boost::geometry::dot_product(diff1, diff2);
 		pointf3 d1(diff1.x, diff1.y, diff1.z);
 		pointf3 d2(diff2.x, diff2.y, diff2.z);
 		pointf3 cross = bg::cross_product(d1, d2);
 		bg::detail::vec_normalize(cross);
 
 		lightVolume = bg::dot_product(cross, light);//0~1
+		//not lighted
 		if (lightVolume < 0) { continue; }
 		int lv = lightVolume * 255;
+
+		
+
+		//for each vertex
+		for (int j = 0; j < 3; j++) {
+			Vec3f world_coords = model->vert(face[j]);
+			Vec2f uv = model->vt(vtface[j]);
+
+
+			//translate screen coords into orthogonal projection
+		//	for (int j = 0; j < 3; ++j)
+			{
+		//		world_coords.x /= (1 - world_coords.z / c);
+		//		world_coords.y /= (1 - world_coords.z / c);
+			}
+
+			//convert into screen coordiate(screen width/height equivalents to image width/height)
+			//x ranges 0~width,y ranges 0~height
+			//screen_coords[j] = Vec3f((world_coords.x + 1.) * width / 2., (world_coords.y + 1.) * height / 2.,world_coords.z);
+			screen_coords[j] = m2v(m* v2m(world_coords));
+			screen_texture_coords[j] = Vec2f(uv.x*texture.get_width(),(1-uv.y)*texture.get_height());
+		}
+
+		//here draws a triangle
 		triangle(screen_coords,zbuffer, image,texture,screen_texture_coords,lightVolume);
 	}
 
 	image.flip_vertically(); // i want to have the origin at the left bottom corner of the image
 	image.write_tga_file("output.tga");
 	delete model;
+	delete[] zbuffer;
 	return 0;
 
 	
