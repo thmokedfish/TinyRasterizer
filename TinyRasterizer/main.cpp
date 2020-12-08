@@ -156,9 +156,10 @@ Vec3f m2v(Matrix m)
 }
 
 //vt:texture coordinates
-void triangle(Vec3f* vertex, float* zbuffer, TGAImage& image,TGAImage& texture,Vec2f* vt, float lightVolume) {
+void triangle(Vec3f* vertex, float* zbuffer, TGAImage& image,TGAImage& texture,Vec2f* vt,float* vertexLightIntense) {
 	Vec2i v[3];
 	float z[3];
+	
 	int i = 0;
 	for (; i < 3; ++i)
 	{
@@ -190,7 +191,13 @@ void triangle(Vec3f* vertex, float* zbuffer, TGAImage& image,TGAImage& texture,V
 		{
 			if (j >= width||j<0 ) { continue; }
 			int index = j + i * width;
+			//重心坐标
 			Vec3f barycentricCoo = barycentric(v[0], v[1], v[2], Vec2i(j, i));
+
+			float lightVolume = vertexLightIntense[0] * barycentricCoo[0] +
+				vertexLightIntense[1] * barycentricCoo[1] + vertexLightIntense[2] * barycentricCoo[2];
+			lightVolume *= -1;
+			if (lightVolume < 0) { continue; }
 			float zval = z[0] * barycentricCoo[0] + z[1] * barycentricCoo[1] + z[2] * barycentricCoo[2];
 			if (zbuffer[index] < zval)
 			{
@@ -241,8 +248,9 @@ int main() {
 	
 	//光照模型
 	//light
-	pointf3 light(0, 0, -1);
-	bg::detail::vec_normalize(light);
+	Vec3f light(0, 0, -1);
+	light.normalize();
+	//bg::detail::vec_normalize(light);
 	
 	int length = width * height;
 	float* zbuffer = new float[length];
@@ -273,9 +281,10 @@ int main() {
 		std::vector<int> vtface = model->vtface(i);
 		Vec3f screen_coords[3];
 		Vec2f screen_texture_coords[3];
-		float lightVolume;
+		//float lightVolume;
 
 		//calculate light volume
+		/*
 		Vec3f diff1 = model->vert(face[0]) - model->vert(face[1]);
 		Vec3f diff2 = model->vert(face[2]) - model->vert(face[1]);
 
@@ -288,7 +297,8 @@ int main() {
 		//not lighted
 		if (lightVolume < 0) { continue; }
 		int lv = lightVolume * 255;
-
+		*/
+		float lightIntense[3];
 		
 
 		//for each vertex
@@ -296,6 +306,10 @@ int main() {
 			Vec3f world_coords = model->vert(face[j]);
 			Vec2f uv = model->vt(vtface[j]);
 
+
+			Vec3f normal = model->vn(face[j]);
+			normal.normalize();
+			lightIntense[j] = normal * light;// bg::dot_product(normal, light);
 
 			//translate screen coords into orthogonal projection
 		//	for (int j = 0; j < 3; ++j)
@@ -312,7 +326,7 @@ int main() {
 		}
 
 		//here draws a triangle
-		triangle(screen_coords,zbuffer, image,texture,screen_texture_coords,lightVolume);
+		triangle(screen_coords,zbuffer, image,texture,screen_texture_coords,lightIntense);
 	}
 
 	image.flip_vertically(); // i want to have the origin at the left bottom corner of the image
