@@ -167,9 +167,9 @@ void triangle(Vec3f* vertex, float* zbuffer, TGAImage& image,TGAImage& texture,V
 		v[i].y = vertex[i].y;
 		z[i] = vertex[i].z;
 	}
-	if (v[1].y > v[2].y) { swap(v[2], v[1]); swap(z[2], z[1]); swap(vt[2], vt[1]); }
-	if (v[0].y > v[1].y) { swap(v[0], v[1]); swap(z[0], z[1]); swap(vt[0], vt[1]);}
-	if (v[1].y > v[2].y) { swap(v[1], v[2]); swap(z[1], z[2]); swap(vt[2], vt[1]);}
+	if (v[1].y > v[2].y) { swap(v[2], v[1]); swap(z[2], z[1]); swap(vt[2], vt[1]); swap(vertexLightIntense[2], vertexLightIntense[1]); }
+	if (v[0].y > v[1].y) { swap(v[0], v[1]); swap(z[0], z[1]); swap(vt[0], vt[1]); swap(vertexLightIntense[0], vertexLightIntense[1]);}
+	if (v[1].y > v[2].y) { swap(v[1], v[2]); swap(z[1], z[2]); swap(vt[2], vt[1]); swap(vertexLightIntense[2], vertexLightIntense[1]);}
 	if (v[0].y == v[2].y) { return; }
 	//1/Ð±ÂÊ
 	float s12, s01;
