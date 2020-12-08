@@ -24,100 +24,6 @@ Model* model = NULL;
 const int width = 800;
 const int height = 800;
 
-void line(int x0, int y0, int x1, int y1, TGAImage& image, const TGAColor& color) {
-	bool steep = false;
-	if (std::abs(x0 - x1) < std::abs(y0 - y1)) {
-		std::swap(x0, y0);
-		std::swap(x1, y1);
-		steep = true;
-	}
-	if (x0 > x1) {
-		std::swap(x0, x1);
-		std::swap(y0, y1);
-	}
-	int dx = x1 - x0;
-	int dy = y1 - y0;
-	int derror2 = std::abs(dy) * 2;
-	int error2 = 0;
-	int y = y0;
-	for (int x = x0; x <= x1; x++) {
-		if (steep) {
-			image.set(y, x, color);
-		}
-		else {
-			image.set(x, y, color);
-		}
-		error2 += derror2;
-		if (error2 > dx) {
-			y += (y1 > y0 ? 1 : -1);
-			error2 -= dx * 2;
-		}
-	}
-}
-void line(Vec2f t0, Vec2f t1, TGAImage& image, const TGAColor& color) {
-	bool steep = false;
-	if (std::abs(t0.x - t1.x) < std::abs(t0.y - t1.y)) {
-		std::swap(t0.x, t0.y);
-		std::swap(t1.x, t1.y);
-		steep = true;
-	}
-	if (t0.x > t1.x) {
-		std::swap(t0, t1);
-	}
-	int dx = t1.x - t0.x;
-	int dy = t1.y - t0.y;
-	int derror2 = std::abs(dy) * 2;
-	int error2 = 0;
-	int y = t0.y;
-	for (int x = t0.x; x <= t1.x; x++) {
-		if (steep) {
-			image.set(y, x, color);
-		}
-		else {
-			image.set(x, y, color);
-		}
-		error2 += derror2;
-		if (error2 > dx) {
-			y += (t1.y > t0.y ? 1 : -1);
-			error2 -= dx * 2;
-		}
-	}
-}
-
-void triangleOutline(Vec2f t0, Vec2f t1, Vec2f t2, TGAImage& image, const TGAColor& color)
-{
-	line(t0, t1, image, color);
-	line(t1, t2, image, color);
-	line(t2, t0, image, color);
-
-}
-
-void oldtriangle(Vec3i t0, Vec3i t1, Vec3i t2, float* zbuffer,TGAImage& image, const TGAColor& color)
-{
-	if (t1.y > t2.y) { swap(t2, t1); }
-	if (t0.y > t1.y) { swap(t0, t1); }
-	if (t1.y > t2.y) { swap(t1, t2); }
-	if (t0.y == t2.y) { return; }
-	//1/斜率
-	float s12, s01;
-	s12 = t2.y != t1.y ? ((float)(t2.x - t1.x) / (t2.y - t1.y)) : 0;
-	s01 = t0.y != t1.y ? ((float)(t1.x - t0.x) / (t1.y - t0.y)) : 0;
-	float ttx = t2.x - t0.x; float tty = t2.y - t0.y;
-	float s02 = (float)(t2.x - t0.x) / (t2.y - t0.y);
-	int x02, x1;
-	for (int i = t0.y; i <= t2.y; ++i)
-	{
-		x02 = t0.x + (i - t0.y) * s02;
-		x1 = i > t1.y ? (t1.x + (i - t1.y) * s12) : (t0.x + (i - t0.y) * s01);
-
-		if (x02 > x1) { swap(x02, x1); }
-		for (int j = x02; j < x1; ++j)
-		{
-			image.set(j, i, color);
-		}
-	}
-}
-
 //叉乘模长
 inline float Edgefunction(Vec2i vec0, Vec2i vec1)
 {
@@ -235,16 +141,6 @@ Matrix OrthogonalConvert(float cameraZ)
 
 
 int main() {
-	/*
-	//三角形
-	TGAImage image(width, height, TGAImage::RGB);
-	float* zbuffer = new float[width * height];
-	Vec3f t0[3] = { Vec3f(550,600,12), Vec3f(50,400,10),Vec3f(750,450,11) };
-	triangle(t0,zbuffer, image, red);
-	image.flip_vertically(); // i want to have the origin at the left bottom corner of the image
-	image.write_tga_file("triangle.tga");
-	return 0;
-	*/
 	
 	//光照模型
 	//light
@@ -281,23 +177,9 @@ int main() {
 		std::vector<int> vtface = model->vtface(i);
 		Vec3f screen_coords[3];
 		Vec2f screen_texture_coords[3];
-		//float lightVolume;
 
 		//calculate light volume
-		/*
-		Vec3f diff1 = model->vert(face[0]) - model->vert(face[1]);
-		Vec3f diff2 = model->vert(face[2]) - model->vert(face[1]);
-
-		pointf3 d1(diff1.x, diff1.y, diff1.z);
-		pointf3 d2(diff2.x, diff2.y, diff2.z);
-		pointf3 cross = bg::cross_product(d1, d2);
-		bg::detail::vec_normalize(cross);
-
-		lightVolume = bg::dot_product(cross, light);//0~1
-		//not lighted
-		if (lightVolume < 0) { continue; }
-		int lv = lightVolume * 255;
-		*/
+		
 		float lightIntense[3];
 		
 
@@ -309,14 +191,8 @@ int main() {
 
 			Vec3f normal = model->vn(face[j]);
 			normal.normalize();
-			lightIntense[j] = normal * light;// bg::dot_product(normal, light);
+			lightIntense[j] = normal * light;
 
-			//translate screen coords into orthogonal projection
-		//	for (int j = 0; j < 3; ++j)
-			{
-		//		world_coords.x /= (1 - world_coords.z / c);
-		//		world_coords.y /= (1 - world_coords.z / c);
-			}
 
 			//convert into screen coordiate(screen width/height equivalents to image width/height)
 			//x ranges 0~width,y ranges 0~height
@@ -335,41 +211,6 @@ int main() {
 	delete[] zbuffer;
 	return 0;
 
-	
 
-
-
-
-
-
-
-
-
-
-
-	/*
-	线框模型
-		model = new Model("F:/CppProjects/Rendering/tinyrenderer-master/include/obj/african_head/african_head.obj");
-
-		const TGAColor& rwhite = white;
-		TGAImage image(width, height, TGAImage::RGB);
-		for (int i = 0; i < model->nfaces(); i++) {
-			std::vector<int> face = model->face(i);
-			for (int j = 0; j < 3; j++) {
-				Vec3f v0 = model->vert(face[j]);
-				Vec3f v1 = model->vert(face[(j + 1) % 3]);
-				int x0 = (v0.x + 1.) * width / 2.;
-				int y0 = (v0.y + 1.) * height / 2.;
-				int x1 = (v1.x + 1.) * width / 2.;
-				int y1 = (v1.y + 1.) * height / 2.;
-				line(x0, y0, x1, y1, image, white);
-			}
-		}
-		image.flip_vertically(); // i want to have the origin at the left bottom corner of the image
-		image.write_tga_file("output2.tga");
-		delete model;
-		return 0;
-	}
-	*/
 
 }
