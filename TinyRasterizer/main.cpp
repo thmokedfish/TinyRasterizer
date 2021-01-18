@@ -60,36 +60,44 @@ Vec3f m2v(Matrix m)
 {
 	return Vec3f(m[0][0]/m[3][0], m[1][0]/m[3][0], m[2][0]/m[3][0]);
 }
-
 //vt:texture coordinates
-void triangle(Vec3f* vertex, float* zbuffer, TGAImage& image,TGAImage& texture,Vec2f* vt,float* vertexLightIntense) {
+void triangle(const Vec3f* vertex, float* zbuffer, TGAImage& image,TGAImage& texture,const Vec2f* texture_coords,const float* vertexLightIntense) {
 	Vec2i v[3];
-	float z[3];
-	
-	int i = 0;
-	for (; i < 3; ++i)
+	struct vertexInfo
 	{
-		v[i].x = vertex[i].x;
-		v[i].y = vertex[i].y;
-		z[i] = vertex[i].z;
+		Vec2i pos;
+		float zbuff;
+		Vec2f vt;
+		float lightVol;
+	};
+
+	vertexInfo infos[3];
+	
+	for (int i=0; i < 3; ++i)
+	{
+		infos[i].pos.x = vertex[i].x;
+		infos[i].pos.y = vertex[i].y;
+		infos[i].zbuff = vertex[i].z;
+		infos[i].vt = texture_coords[i];
+		infos[i].lightVol = vertexLightIntense[i];
 	}
-	if (v[1].y > v[2].y) { swap(v[2], v[1]); swap(z[2], z[1]); swap(vt[2], vt[1]); swap(vertexLightIntense[2], vertexLightIntense[1]); }
-	if (v[0].y > v[1].y) { swap(v[0], v[1]); swap(z[0], z[1]); swap(vt[0], vt[1]); swap(vertexLightIntense[0], vertexLightIntense[1]);}
-	if (v[1].y > v[2].y) { swap(v[1], v[2]); swap(z[1], z[2]); swap(vt[2], vt[1]); swap(vertexLightIntense[2], vertexLightIntense[1]);}
-	if (v[0].y == v[2].y) { return; }
+	if (infos[1].pos.y > infos[2].pos.y) { swap(infos[2], infos[1]);  }
+	if (infos[0].pos.y > infos[1].pos.y) { swap(infos[0],infos[1]);}
+	if (infos[1].pos.y > infos[2].pos.y) { swap(infos[1],infos[2]);}
+	if (infos[0].pos.y == infos[2].pos.y) { return; }
 	//1/斜率
 	float s12, s01;
-	s12 = v[2].y != v[1].y ? ((float)(v[2].x - v[1].x) / (v[2].y - v[1].y)) : 0;
-	s01 = v[0].y != v[1].y ? ((float)(v[1].x - v[0].x) / (v[1].y - v[0].y)) : 0;
-	float ttx = v[2].x - v[0].x; float tty = v[2].y - v[0].y;
-	float s02 = (float)(v[2].x - v[0].x) / (v[2].y - v[0].y);
+	s12 = infos[2].pos.y != infos[1].pos.y ? ((float)(infos[2].pos.x - infos[1].pos.x) / (infos[2].pos.y - infos[1].pos.y)) : 0;
+	s01 = infos[0].pos.y != infos[1].pos.y ? ((float)(infos[1].pos.x - infos[0].pos.x) / (infos[1].pos.y - infos[0].pos.y)) : 0;
+	float ttx = infos[2].pos.x - infos[0].pos.x; float tty = infos[2].pos.y - infos[0].pos.y;
+	float s02 = (float)(infos[2].pos.x - infos[0].pos.x) / (infos[2].pos.y - infos[0].pos.y);
 	int x02, x1;
 
-	for (int i = v[0].y; i <= v[2].y; ++i)
+	for (int i = infos[0].pos.y; i <= infos[2].pos.y; ++i)
 	{
 		if (i >= height||i<0 ) { continue; }
-		x02 = v[0].x + (i - v[0].y) * s02;
-		x1 = i > v[1].y ? (v[1].x + (i - v[1].y) * s12) : (v[0].x + (i - v[0].y) * s01);
+		x02 = infos[0].pos.x + (i - infos[0].pos.y) * s02;
+		x1 = i > infos[1].pos.y ? (infos[1].pos.x + (i - infos[1].pos.y) * s12) : (infos[0].pos.x + (i - infos[0].pos.y) * s01);
 
 		if (x02 > x1) { swap(x02, x1); }
 		//每个像素
@@ -98,13 +106,13 @@ void triangle(Vec3f* vertex, float* zbuffer, TGAImage& image,TGAImage& texture,V
 			if (j >= width||j<0 ) { continue; }
 			int index = j + i * width;
 			//重心坐标
-			Vec3f barycentricCoo = barycentric(v[0], v[1], v[2], Vec2i(j, i));
+			Vec3f barycentricCoo = barycentric(infos[0].pos, infos[1].pos, infos[2].pos, Vec2i(j, i));
 
-			float lightVolume = vertexLightIntense[0] * barycentricCoo[0] +
-				vertexLightIntense[1] * barycentricCoo[1] + vertexLightIntense[2] * barycentricCoo[2];
+			float lightVolume = infos[0].lightVol * barycentricCoo[0] +
+				infos[1].lightVol * barycentricCoo[1] + infos[2].lightVol * barycentricCoo[2];
 			lightVolume *= -1;
 			if (lightVolume < 0) { continue; }
-			float zval = z[0] * barycentricCoo[0] + z[1] * barycentricCoo[1] + z[2] * barycentricCoo[2];
+			float zval = infos[0].zbuff * barycentricCoo[0] + infos[1].zbuff * barycentricCoo[1] + infos[2].zbuff * barycentricCoo[2];
 			if (zbuffer[index] < zval)
 			{
 				zbuffer[index] = zval;
@@ -113,8 +121,8 @@ void triangle(Vec3f* vertex, float* zbuffer, TGAImage& image,TGAImage& texture,V
 				float y_texture_coord = 0;
 				for (int t = 0; t < 3; ++t)
 				{
-					x_texture_coord += barycentricCoo[t] * vt[t].x;
-					y_texture_coord += barycentricCoo[t] * vt[t].y;
+					x_texture_coord += barycentricCoo[t] * infos[t].vt.x;
+					y_texture_coord += barycentricCoo[t] * infos[t].vt.y;
 				}
 				TGAColor color=texture.get(x_texture_coord, y_texture_coord);
 				color = color * lightVolume;
@@ -124,6 +132,7 @@ void triangle(Vec3f* vertex, float* zbuffer, TGAImage& image,TGAImage& texture,V
 	}
 }
 //assume world coordinate ranges -1~1
+//viewport matrix
 Matrix world2screen(int width,int height)
 {
 	Matrix m = Matrix::identity();
@@ -132,28 +141,44 @@ Matrix world2screen(int width,int height)
 	return m;
 }
 
-Matrix OrthogonalConvert(float cameraZ)
+Matrix projection_matrix(float cameraZ)
 {
 	Matrix m = Matrix::identity();
 	m[3][2] = -1 / cameraZ;
 	return m;
 }
 
+//用这三个参数得出摄像机所在坐标系(原点center)的三个轴向量x,y,z
+//求坐标系之间过渡矩阵的逆矩阵M
+//要进行变换，需要点P减去center坐标之后乘M的逆矩阵
+Matrix frame_convert(Vec3f center, Vec3f camera, Vec3f up)
+{
+	Vec3f z = (camera - center).normalize();
+	Vec3f x = cross(up, z).normalize();
+	Vec3f y = cross(z, x).normalize();
+	Matrix m = Matrix::identity();
+	/*
+	* 从原坐标系到相机坐标系的过渡矩阵:
+	* x.x y.x z.x 0
+	* x.y y.y z.y 0
+	* x.z y.z z.z 0
+	*  0   0   0  1
+	* 过渡矩阵满足正交矩阵 所以逆矩阵=转置矩阵 下面直接构造逆的
+	*/
+	Matrix Tr = Matrix::identity();
+	for (int i = 0; i < 3; ++i)
+	{
+		m[0][i] = x[i];
+		m[1][i] = y[i];
+		m[2][i] = z[i];
+		Tr[i][3] = -center[i];//矩阵Tr代表"P减去center坐标"这一变换
+	}
+	return m * Tr;
+}
+
 
 int main() {
 	
-	//光照模型
-	//light
-	Vec3f light(0, 0, -1);
-	light.normalize();
-	//bg::detail::vec_normalize(light);
-	
-	int length = width * height;
-	float* zbuffer = new float[length];
-	for (int i =0;i<length;++i)
-	{
-		zbuffer[i] = numeric_limits<int>::min();
-	}
 	model = new Model("obj/african_head/african_head.obj");
 	const int texturewidth = 800, textureHeight = 800;
 	TGAImage image(width, height, TGAImage::RGB);
@@ -162,21 +187,36 @@ int main() {
 
 
 
+	//light
+	Vec3f light(0, 0, -1);
+	light.normalize();
+	//bg::detail::vec_normalize(light);
+
+	int length = width * height;
+	float* zbuffer = new float[length];
+	for (int i = 0; i < length; ++i)
+	{
+		zbuffer[i] = numeric_limits<int>::min();
+	}
 	//camera position(0,0,c)
-	int c = 3;
+	//int c = 3;
+	Vec3f camera = Vec3f(-3, -3, 5);
+	Vec3f center = Vec3f(-1, -1, 0);
+	float c = (camera - center).norm();
+	cout <<"norm " << c << endl;
 	/// <summary>
 	/// 手算了一下 对于列向量（本次代码中的是列向量），后进行的矩阵变换靠左，先进行的矩阵变换靠右
 	/// 例如：A*B*v,是先将向量v进行B变换，然后进行A变换
 	/// </summary>
 	/// <returns></returns>
-	Matrix m = world2screen(width, height)*OrthogonalConvert(c);
+	Matrix m = world2screen(width, height)*projection_matrix(c)*frame_convert(center,camera,Vec3f(0,1,0));
 
 	//for each triangle
 	for (int i = 0; i < model->nfaces(); i++) {
 		std::vector<int> face = model->face(i);
 		std::vector<int> vtface = model->vtface(i);
 		Vec3f screen_coords[3];
-		Vec2f screen_texture_coords[3];
+		Vec2f texture_coords[3];
 
 		//calculate light volume
 		
@@ -198,11 +238,11 @@ int main() {
 			//x ranges 0~width,y ranges 0~height
 			//screen_coords[j] = Vec3f((world_coords.x + 1.) * width / 2., (world_coords.y + 1.) * height / 2.,world_coords.z);
 			screen_coords[j] = m2v(m* v2m(world_coords));
-			screen_texture_coords[j] = Vec2f(uv.x*texture.get_width(),(1-uv.y)*texture.get_height());
+			texture_coords[j] = Vec2f(uv.x*texture.get_width(),(1-uv.y)*texture.get_height());
 		}
 
 		//here draws a triangle
-		triangle(screen_coords,zbuffer, image,texture,screen_texture_coords,lightIntense);
+		triangle(screen_coords,zbuffer, image,texture,texture_coords,lightIntense);
 	}
 
 	image.flip_vertically(); // i want to have the origin at the left bottom corner of the image
